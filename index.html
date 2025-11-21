@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Habit Command Center</title>
     
     <!-- React & ReactDOM -->
@@ -23,9 +23,9 @@
 
     <style>
         /* Industrial Scrollbar */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: #09090b; }
-        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
         ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
 
         body {
@@ -33,6 +33,7 @@
             color: #e4e4e7;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
         }
         
         .font-mono-tech { font-family: 'Menlo', 'Monaco', 'Courier New', monospace; letter-spacing: -0.02em; }
@@ -49,53 +50,73 @@
             background: rgba(255, 255, 255, 0.07);
         }
 
-        /* Toast Animation */
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        /* Remove Spinners from Number Inputs */
+        .no-spinner::-webkit-inner-spin-button, 
+        .no-spinner::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
         }
-        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        .no-spinner {
+            -moz-appearance: textfield;
+        }
+
+        /* Mobile Optimizations */
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-in { animation: slideIn 0.3s ease-out forwards; }
+        
+        @media (max-width: 768px) {
+            .modal-content {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                border-radius: 1rem 1rem 0 0;
+                max-height: 85vh;
+                overflow-y: auto;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // --- Configuration ---
+        // --- Config & Utilities ---
         const DEFAULT_HABITS = [
-            { id: 'run', name: 'Running', type: 'numeric', unit: 'min', category: 'physical', color: '#3b82f6' },
-            { id: 'gym', name: 'Gym', type: 'boolean', category: 'physical', color: '#06b6d4' },
-            { id: 'pushups', name: 'Pushups', type: 'numeric', unit: 'count', category: 'physical', color: '#10b981' },
-            { id: 'situps', name: 'Situps', type: 'numeric', unit: 'count', category: 'physical', color: '#84cc16' },
-            { id: 'reading', name: 'Reading', type: 'boolean', category: 'intellect', color: '#f59e0b' },
-            { id: 'learning', name: 'Learning', type: 'boolean', category: 'intellect', color: '#d946ef' },
-            { id: 'vibe_coding', name: 'Vibe Coding', type: 'boolean', category: 'creative', color: '#8b5cf6' },
-            { id: 'play', name: 'Play', type: 'boolean', category: 'wellbeing', color: '#f43f5e' },
+            { id: 'run', name: 'Running', type: 'numeric', unit: 'min', category: 'physical', color: '#3b82f6', icon: 'activity' },
+            { id: 'gym', name: 'Gym', type: 'boolean', category: 'physical', color: '#06b6d4', icon: 'dumbbell' },
+            { id: 'pushups', name: 'Pushups', type: 'numeric', unit: 'count', category: 'physical', color: '#10b981', icon: 'biceps-flexed' },
+            { id: 'reading', name: 'Reading', type: 'boolean', category: 'intellect', color: '#f59e0b', icon: 'book-open' },
+            { id: 'vibe', name: 'Vibe Coding', type: 'boolean', category: 'creative', color: '#8b5cf6', icon: 'code' },
         ];
 
-        // --- Components ---
+        const ICON_OPTIONS = [
+            'activity', 'dumbbell', 'biceps-flexed', 'book-open', 'code', 'zap', 'brain', 
+            'flame', 'droplet', 'moon', 'sun', 'coffee', 'music', 'gamepad-2', 'briefcase', 
+            'dollar-sign', 'heart', 'smile', 'star', 'trophy', 'timer', 'footprints'
+        ];
 
         const Icon = ({ name, size = 20, className }) => {
             useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
             return <i data-lucide={name} width={size} height={size} className={className}></i>;
         };
 
-        // Toast Notification Component
+        // --- UI Components ---
+
         const Toast = ({ message, type, onClose }) => {
-            useEffect(() => {
-                const timer = setTimeout(onClose, 4000);
-                return () => clearTimeout(timer);
-            }, [onClose]);
-
-            const bgClass = type === 'success' ? 'bg-emerald-950/90 border-emerald-800 text-emerald-200' : 'bg-red-950/90 border-red-800 text-red-200';
-            const iconName = type === 'success' ? 'check-circle' : 'alert-triangle';
-
+            useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
+            const colors = type === 'success' ? 'bg-emerald-950/90 border-emerald-800 text-emerald-200' : 'bg-red-950/90 border-red-800 text-red-200';
             return (
-                <div className={`toast-enter fixed top-24 right-4 z-50 px-4 py-3 rounded border flex items-center space-x-3 backdrop-blur-md shadow-2xl ${bgClass}`}>
-                    <Icon name={iconName} size={18} />
-                    <span className="font-mono text-xs uppercase tracking-wider font-bold">{message}</span>
+                <div className={`fixed top-6 right-4 z-[60] px-4 py-3 rounded border flex items-center space-x-3 backdrop-blur-md shadow-2xl animate-slide-in ${colors}`}>
+                    <Icon name={type === 'success' ? 'check' : 'alert-circle'} size={18} />
+                    <span className="font-mono text-xs uppercase font-bold tracking-wider">{message}</span>
                 </div>
             );
         };
@@ -104,33 +125,80 @@
             if (!isOpen) return null;
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="bg-[#09090b] border border-zinc-800 w-full max-w-md rounded-lg shadow-2xl animate-fade-in">
-                        <div className="flex justify-between items-center p-4 border-b border-zinc-800">
-                            <h3 className="font-mono-tech font-bold text-zinc-100">{title}</h3>
-                            <button onClick={onClose} className="text-zinc-500 hover:text-white"><Icon name="x" size={20} /></button>
+                    <div className="modal-content bg-[#09090b] border border-zinc-800 w-full max-w-md rounded-lg shadow-2xl animate-slide-in md:rounded-lg">
+                        <div className="flex justify-between items-center p-4 border-b border-zinc-800 sticky top-0 bg-[#09090b] z-10 rounded-t-lg">
+                            <h3 className="font-mono-tech font-bold text-zinc-100 uppercase tracking-wider">{title}</h3>
+                            <button onClick={onClose} className="text-zinc-500 hover:text-white p-2"><Icon name="x" size={20} /></button>
                         </div>
-                        <div className="p-4">{children}</div>
+                        <div className="p-4 max-h-[75vh] overflow-y-auto custom-scrollbar">{children}</div>
                     </div>
                 </div>
             );
         };
 
-        const AnalyticsChart = ({ logs }) => {
+        const Heatmap = ({ logs }) => {
+            const weeks = 16;
+            const today = new Date();
+            const dayOfWeek = today.getDay(); 
+            const endDate = new Date(today);
+            endDate.setDate(today.getDate() + (6 - dayOfWeek));
+            
+            const grid = [];
+            for (let w = 0; w < weeks; w++) {
+                const weekData = [];
+                for (let d = 0; d < 7; d++) {
+                    const date = new Date(endDate);
+                    date.setDate(endDate.getDate() - ((weeks - 1 - w) * 7 + (6 - d)));
+                    const dateStr = date.toLocaleDateString('en-CA');
+                    const completedCount = logs.filter(l => l.date === dateStr).length;
+                    let intensity = 0;
+                    if (completedCount > 0) intensity = 1;
+                    if (completedCount > 2) intensity = 2;
+                    if (completedCount > 4) intensity = 3;
+                    if (completedCount > 6) intensity = 4;
+                    
+                    weekData.push({ date: dateStr, intensity });
+                }
+                grid.push(weekData);
+            }
+
+            return (
+                <div className="w-full overflow-x-auto pb-2">
+                    <div className="flex gap-1 min-w-max">
+                        {grid.map((week, wi) => (
+                            <div key={wi} className="flex flex-col gap-1">
+                                {week.map((day, di) => {
+                                    const colors = ['bg-zinc-900', 'bg-green-900/40', 'bg-green-700/60', 'bg-green-500/80', 'bg-green-400'];
+                                    return (
+                                        <div key={di} 
+                                            className={`w-3 h-3 rounded-sm ${colors[day.intensity]}`} 
+                                            title={`${day.date}: ${day.intensity} habits`}
+                                        ></div>
+                                    )
+                                })}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Analytics Chart Component (Refactored) ---
+        const AnalyticsChart = ({ logs, habits, showLegend = false }) => {
             const canvasRef = useRef(null);
             const chartRef = useRef(null);
 
             useEffect(() => {
                 if (!canvasRef.current) return;
-                
                 const last7Days = [...Array(7)].map((_, i) => {
                     const d = new Date();
                     d.setDate(d.getDate() - (6 - i));
-                    return d.toISOString().split('T')[0];
+                    return d.toLocaleDateString('en-CA');
                 });
 
-                const datasets = DEFAULT_HABITS.map(habit => {
+                const datasets = habits.map(habit => {
                     const data = last7Days.map(date => {
-                        const entry = logs.find(l => l.date === date && l.habit === habit.name);
+                        const entry = logs.find(l => l.date === date && (l.habitId === habit.id || l.habit === habit.name));
                         if (!entry) return 0;
                         return habit.type === 'numeric' ? parseFloat(entry.value) : 1;
                     });
@@ -139,338 +207,612 @@
                         data: data,
                         borderColor: habit.color,
                         backgroundColor: habit.color + '20',
-                        borderWidth: 1,
+                        borderWidth: 2,
                         tension: 0.3,
-                        pointRadius: 2
+                        pointRadius: showLegend ? 3 : 2,
+                        pointBackgroundColor: habit.color
                     };
                 });
 
                 if (chartRef.current) chartRef.current.destroy();
-
+                
                 chartRef.current = new Chart(canvasRef.current, {
                     type: 'line',
-                    data: { labels: last7Days.map(d => d.slice(5)), datasets: datasets },
+                    data: { labels: last7Days.map(d => d.slice(5)), datasets },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: { legend: { position: 'bottom', labels: { color: '#a1a1aa', font: { family: 'Menlo' }, boxWidth: 10 } } },
+                        plugins: { 
+                            legend: { 
+                                display: showLegend,
+                                labels: {
+                                    color: '#71717a',
+                                    font: { family: 'monospace', size: 10 },
+                                    boxWidth: 10
+                                }
+                            } 
+                        },
                         scales: {
-                            y: { grid: { color: '#27272a' }, ticks: { color: '#71717a' } },
-                            x: { grid: { color: '#27272a' }, ticks: { color: '#71717a' } }
-                        }
+                            y: { 
+                                grid: { color: '#27272a' }, 
+                                ticks: { color: '#52525b', font: { family: 'monospace' } },
+                                beginAtZero: true
+                            },
+                            x: { 
+                                grid: { color: '#27272a' }, 
+                                ticks: { color: '#52525b', font: { family: 'monospace' } } 
+                            }
+                        },
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
                     }
                 });
                 return () => { if (chartRef.current) chartRef.current.destroy(); };
-            }, [logs]);
+            }, [logs, habits, showLegend]);
 
-            return <div className="w-full h-64 bg-[#09090b] border border-zinc-800 rounded-lg p-4 relative"><canvas ref={canvasRef}></canvas></div>;
+            return <div className="w-full h-full"><canvas ref={canvasRef}></canvas></div>;
         };
 
-        // --- Main Application ---
+        // --- Sub-Components ---
 
-        const App = () => {
-            const [activeTab, setActiveTab] = useState('log');
-            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-            const [logs, setLogs] = useState(() => {
-                // 1. Initialize immediately from Local Storage to prevent blank screens
-                const saved = localStorage.getItem('habitLogs');
-                return saved ? JSON.parse(saved) : [];
-            });
-            
-            // Status Management
-            const [loading, setLoading] = useState(false);
-            const [connectionStatus, setConnectionStatus] = useState('idle'); // idle, connecting, connected, error, local
-            const [notification, setNotification] = useState(null); // { msg, type }
-            
-            const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-            const [dailyEntries, setDailyEntries] = useState({});
-            
-            const [settings, setSettings] = useState(() => {
-                const saved = localStorage.getItem('habitSettings');
-                return saved ? JSON.parse(saved) : { googleScriptUrl: '', mode: 'local' };
-            });
-
-            // --- Data Sync Engine ---
-
-            useEffect(() => {
-                if (settings.mode === 'cloud') {
-                    syncWithCloud();
-                } else {
-                    setConnectionStatus('local');
-                }
-            }, [settings.mode]); // Run on mount or mode change
-
-            const syncWithCloud = async () => {
-                if (!settings.googleScriptUrl) {
-                    setConnectionStatus('error');
-                    return;
-                }
-
-                setConnectionStatus('connecting');
-                try {
-                    // Use credentials: 'omit' to fix CORS with Apps Script
-                    const response = await fetch(settings.googleScriptUrl, { redirect: "follow", credentials: 'omit' });
-                    if (!response.ok) throw new Error("Network Error");
-                    
-                    const cloudData = await response.json();
-                    
-                    if (Array.isArray(cloudData)) {
-                        // Merge Strategy: We trust cloud, but keep local if cloud is empty (first run)
-                        if (cloudData.length > 0) {
-                            setLogs(cloudData);
-                            localStorage.setItem('habitLogs', JSON.stringify(cloudData)); 
-                        }
-                        setConnectionStatus('connected');
-                    }
-                } catch (err) {
-                    console.error("Sync failed:", err);
-                    // Fallback: Keep showing local data, but mark status as error
-                    setConnectionStatus('error');
-                    // Don't show a toast here to avoid spamming on every refresh, just the red dot is enough
-                }
-            };
-
-            const handleSaveSettings = (newSettings) => {
-                setSettings(newSettings);
-                localStorage.setItem('habitSettings', JSON.stringify(newSettings));
-                setIsSettingsOpen(false);
-                
-                if (newSettings.mode === 'cloud') {
-                    setConnectionStatus('connecting');
-                    setTimeout(() => syncWithCloud(), 500);
-                } else {
-                    setConnectionStatus('local');
-                }
-            };
-
-            const showToast = (msg, type = 'success') => {
-                setNotification({ msg, type });
-            };
-
-            const handleSubmit = async () => {
-                setLoading(true);
-                
-                // Build Payload
-                const habitsToLog = [];
-                DEFAULT_HABITS.forEach(habit => {
-                    let val = dailyEntries[habit.id];
-                    if (habit.type === 'boolean' && val === true) {
-                        habitsToLog.push({ name: habit.name, type: 'boolean', value: 1 });
-                    } else if (habit.type === 'numeric' && val && val > 0) {
-                        habitsToLog.push({ name: habit.name, type: 'numeric', value: val });
-                    }
-                });
-
-                if (habitsToLog.length === 0) {
-                    showToast("No data entered to record", "error");
-                    setLoading(false);
-                    return;
-                }
-
-                const payload = { date: selectedDate, habits: habitsToLog };
-
-                // 1. Optimistic Local Save (Instant Feedback)
-                const newEntries = habitsToLog.map(h => ({
-                    date: selectedDate,
-                    habit: h.name,
-                    type: h.type,
-                    value: h.value
-                }));
-                
-                const updatedLogs = [...logs, ...newEntries];
-                setLogs(updatedLogs);
-                localStorage.setItem('habitLogs', JSON.stringify(updatedLogs));
-
-                // 2. Cloud Save
-                if (settings.mode === 'cloud') {
-                    try {
-                        await fetch(settings.googleScriptUrl, {
-                            method: 'POST',
-                            mode: 'no-cors', // Critical for Apps Script
-                            headers: { 'Content-Type': 'text/plain' },
-                            body: JSON.stringify(payload)
-                        });
-                        showToast("Protocol Synced to Cloud", "success");
-                        setConnectionStatus('connected');
-                    } catch (e) {
-                        console.error("Upload Error", e);
-                        showToast("Cloud Unreachable - Saved Locally", "error");
-                        setConnectionStatus('error');
-                    }
-                } else {
-                    showToast("Protocol Saved Locally", "success");
-                }
-
-                setDailyEntries({});
-                setLoading(false);
-            };
-
-            const handleInputChange = (habitId, value) => {
-                setDailyEntries(prev => ({ ...prev, [habitId]: value }));
-            };
-
-            // --- Visual Helpers ---
-
-            const getStatusColor = () => {
-                if (settings.mode === 'local') return 'bg-yellow-500';
-                if (connectionStatus === 'connecting') return 'bg-blue-500 animate-pulse';
-                if (connectionStatus === 'connected') return 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]';
-                if (connectionStatus === 'error') return 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]';
-                return 'bg-zinc-700';
-            };
-
-            // --- Views ---
-
-            const renderLogView = () => (
-                <div className="animate-fade-in space-y-6 max-w-2xl mx-auto">
-                    <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-xl shadow-xl">
-                        <div className="flex items-center justify-between mb-8 border-b border-zinc-800 pb-4">
-                            <h2 className="text-xl font-mono-tech tracking-widest text-white uppercase">Daily Protocol</h2>
+        const LogView = ({ habits, dailyEntries, setDailyEntries, selectedDate, setSelectedDate, onCommit, loading }) => {
+            return (
+                <div className="space-y-6 animate-slide-in">
+                    <div className="bg-[#09090b] border border-zinc-800 p-5 rounded-xl shadow-lg">
+                        <div className="flex items-center justify-between mb-6 border-b border-zinc-800 pb-4">
+                            <h2 className="text-lg font-mono-tech tracking-widest text-white uppercase">Protocol</h2>
                             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
-                                className="input-tech px-4 py-2 rounded bg-black text-zinc-300 font-mono text-sm" />
+                                className="input-tech px-3 py-2 rounded bg-black text-zinc-300 font-mono text-sm" />
                         </div>
-                        <div className="space-y-6">
-                            {DEFAULT_HABITS.map(habit => (
-                                <div key={habit.id} className="flex items-center justify-between group">
-                                    <div className="flex items-center space-x-3">
-                                        <div className={`w-1 h-8 rounded-full transition-all ${dailyEntries[habit.id] ? 'bg-opacity-100' : 'bg-opacity-30'}`} style={{backgroundColor: habit.color}}></div>
-                                        <span className="text-zinc-300 font-medium text-sm tracking-wide">{habit.name}</span>
-                                    </div>
-                                    <div className="w-32">
-                                        {habit.type === 'numeric' ? (
-                                            <div className="relative">
-                                                <input type="number" placeholder="0" value={dailyEntries[habit.id] || ''}
-                                                    onChange={(e) => handleInputChange(habit.id, e.target.value)}
-                                                    className="input-tech w-full px-3 py-2 rounded text-right text-white" />
-                                                <span className="absolute right-8 top-2 text-xs text-zinc-500 pointer-events-none">{habit.unit}</span>
+                        <div className="space-y-5">
+                            {habits.map(habit => {
+                                const val = dailyEntries[habit.id];
+                                const isDone = habit.type === 'boolean' ? val === true : (val !== undefined && val !== '');
+                                
+                                return (
+                                    <div key={habit.id} className="flex items-center justify-between group">
+                                        <div className="flex items-center space-x-3 flex-1">
+                                            <div className={`p-2 rounded-lg transition-colors ${isDone ? 'bg-zinc-800 text-white' : 'bg-zinc-900 text-zinc-600'}`}>
+                                                <Icon name={habit.icon} size={20} />
                                             </div>
-                                        ) : (
-                                            <button onClick={() => handleInputChange(habit.id, !dailyEntries[habit.id])}
-                                                className={`w-full py-2 rounded border transition-all text-xs uppercase font-bold tracking-wider
-                                                    ${dailyEntries[habit.id] ? `bg-white text-black border-white` : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600'}`}>
-                                                {dailyEntries[habit.id] ? 'COMPLETE' : 'PENDING'}
-                                            </button>
-                                        )}
+                                            <span className={`text-sm font-medium transition-colors ${isDone ? 'text-white' : 'text-zinc-400'}`}>{habit.name}</span>
+                                        </div>
+                                        
+                                        <div className="w-36 flex justify-end">
+                                            {habit.type === 'numeric' ? (
+                                                <div className="flex items-center space-x-2">
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="0" 
+                                                        value={val || ''}
+                                                        onChange={(e) => setDailyEntries(prev => ({...prev, [habit.id]: e.target.value}))}
+                                                        className={`input-tech w-20 px-2 py-2 rounded text-center text-lg font-mono no-spinner ${isDone ? 'border-zinc-500 text-white' : 'border-zinc-800 text-zinc-500'}`} 
+                                                    />
+                                                    <span className="text-xs text-zinc-600 font-mono w-8">{habit.unit}</span>
+                                                </div>
+                                            ) : (
+                                                <button onClick={() => setDailyEntries(prev => ({...prev, [habit.id]: !val}))}
+                                                    className={`w-full py-2 rounded border text-xs font-bold tracking-widest transition-all
+                                                        ${isDone ? `bg-[${habit.color}] border-transparent text-black` : 'bg-transparent border-zinc-800 text-zinc-600'}`}
+                                                    style={isDone ? {backgroundColor: habit.color} : {}}>
+                                                    {isDone ? 'DONE' : 'PENDING'}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                )
+                            })}
                         </div>
-                        <div className="mt-10 pt-6 border-t border-zinc-800 flex justify-end">
-                            <button onClick={handleSubmit} disabled={loading}
-                                className="bg-white text-black px-8 py-3 rounded font-bold tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-50 text-sm font-mono-tech">
+                        <div className="mt-8 pt-4 border-t border-zinc-800">
+                            <button 
+                                onClick={onCommit} 
+                                disabled={loading}
+                                className="w-full bg-white text-black py-3.5 rounded font-mono font-bold tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-50 shadow-lg">
                                 {loading ? 'SYNCING...' : 'COMMIT PROTOCOL'}
                             </button>
                         </div>
                     </div>
                 </div>
             );
+        };
 
-            const renderCalendarView = () => {
-                const today = new Date();
-                const year = today.getFullYear();
-                const month = today.getMonth();
-                const daysInMonth = new Date(year, month + 1, 0).getDate();
-                const startDay = new Date(year, month, 1).getDay();
-                const days = [];
-                for(let i = 0; i < startDay; i++) days.push(null);
-                for(let i = 1; i <= daysInMonth; i++) days.push(i);
+        const CalendarView = ({ logs, habits, setViewingDay }) => {
+            const today = new Date();
+            const [viewDate, setViewDate] = useState(new Date());
+            
+            const year = viewDate.getFullYear();
+            const month = viewDate.getMonth();
+            
+            const startOfMonth = new Date(year, month, 1);
+            const endOfMonth = new Date(year, month + 1, 0);
+            const startDay = startOfMonth.getDay(); // 0 is Sunday
+            const daysInMonth = endOfMonth.getDate();
+            
+            const days = Array(startDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1));
 
-                return (
-                    <div className="animate-fade-in">
-                        <div className="grid grid-cols-7 gap-2 mb-2 text-center">
-                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} className="text-zinc-600 text-xs font-mono uppercase">{d}</div>)}
+            return (
+                <div className="space-y-6 animate-slide-in pb-safe">
+                    <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-xl">
+                         <div className="flex justify-between items-center mb-6">
+                            <button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-2 hover:bg-zinc-800 rounded"><Icon name="chevron-left" size={18} /></button>
+                            <span className="font-mono-tech font-bold text-sm tracking-widest">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' }).toUpperCase()}</span>
+                            <button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-2 hover:bg-zinc-800 rounded"><Icon name="chevron-right" size={18} /></button>
                         </div>
-                        <div className="grid grid-cols-7 gap-2">
-                            {days.map((d, idx) => {
-                                if (!d) return <div key={idx} className="aspect-square"></div>;
-                                const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                                const daysLogs = logs.filter(l => l.date === dateStr);
+                        
+                        <div className="grid grid-cols-7 gap-1 text-center mb-3">
+                            {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} className="text-[10px] text-zinc-600 font-mono">{d}</div>)}
+                        </div>
+                        
+                        <div className="grid grid-cols-7 gap-1">
+                            {days.map((d, i) => {
+                                if (!d) return <div key={i} className="aspect-square"></div>;
+                                
+                                const dateStr = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                                const dayLogs = logs.filter(l => l.date === dateStr);
+                                const isToday = dateStr === today.toLocaleDateString('en-CA');
+                                
                                 return (
-                                    <div key={idx} className="aspect-square bg-[#09090b] border border-zinc-800 rounded flex flex-col p-1 relative overflow-hidden hover:border-zinc-600 transition-colors">
-                                        <span className="text-zinc-500 text-[10px] font-mono">{d}</span>
-                                        <div className="flex flex-wrap gap-1 content-end w-full mt-auto">
-                                            {daysLogs.map((log, li) => {
-                                                const hab = DEFAULT_HABITS.find(h => h.name === log.habit);
-                                                if(!hab) return null;
-                                                return <div key={li} className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: hab.color}}></div>
+                                    <button key={i} 
+                                        onClick={() => dayLogs.length > 0 && setViewingDay({ date: dateStr, logs: dayLogs })}
+                                        className={`aspect-square rounded flex flex-col items-center justify-start pt-1 relative border transition-all
+                                            ${isToday ? 'border-zinc-500 bg-zinc-900' : 'border-zinc-800/50 bg-black hover:bg-zinc-900'}`}
+                                    >
+                                        <span className={`text-[10px] font-mono ${dayLogs.length > 0 ? 'text-white font-bold' : 'text-zinc-600'}`}>{d}</span>
+                                        <div className="grid grid-cols-2 gap-0.5 mt-1 w-full px-1">
+                                            {dayLogs.slice(0,4).map((l, idx) => {
+                                                const hab = habits.find(h => h.name === l.habit) || {};
+                                                return (
+                                                    <div key={idx} className="flex justify-center items-center">
+                                                         <div style={{color: hab.color || '#555'}}>
+                                                            <Icon name={hab.icon || 'circle'} size={8} />
+                                                         </div>
+                                                    </div>
+                                                );
                                             })}
                                         </div>
-                                    </div>
+                                    </button>
                                 );
                             })}
                         </div>
                     </div>
-                );
+
+                    <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-xl overflow-hidden">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-xs font-mono text-zinc-500 uppercase">Consistency Map</h3>
+                            <span className="text-[10px] text-zinc-600">Last 16 Weeks</span>
+                        </div>
+                        <Heatmap logs={logs} />
+                    </div>
+                </div>
+            );
+        };
+
+        const AnalyticsView = ({ logs, habits }) => {
+            const stats = habits.map(h => {
+                const hLogs = logs.filter(l => (l.habitId === h.id || l.habit === h.name));
+                const total = h.type === 'numeric' 
+                    ? hLogs.reduce((acc, cur) => acc + (parseFloat(cur.value) || 0), 0)
+                    : hLogs.length;
+                return { ...h, total };
+            });
+
+            const numericHabits = habits.filter(h => h.type === 'numeric');
+            const booleanHabits = habits.filter(h => h.type === 'boolean');
+
+            return (
+                <div className="animate-slide-in space-y-6">
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 gap-3">
+                        {stats.map(stat => (
+                            <div key={stat.id} className="bg-[#09090b] border border-zinc-800 p-4 rounded-xl">
+                                <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                                    <Icon name={stat.icon} size={14} />
+                                    <span className="text-[10px] uppercase font-mono tracking-wider">{stat.name}</span>
+                                </div>
+                                <div className="text-2xl font-bold text-white">
+                                    {stat.total} <span className="text-xs text-zinc-600 font-normal">{stat.unit || 'sessions'}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Individual Numeric Charts */}
+                    {numericHabits.map(h => (
+                         <div key={h.id} className="bg-[#09090b] border border-zinc-800 p-6 rounded-xl">
+                             <h3 className="text-xs font-mono text-zinc-500 mb-4 uppercase tracking-widest">{h.name} Velocity (Last 7 Days)</h3>
+                             <div className="h-48 w-full relative">
+                                 <AnalyticsChart logs={logs} habits={[h]} />
+                             </div>
+                         </div>
+                    ))}
+
+                    {/* Combined Boolean Chart */}
+                    {booleanHabits.length > 0 && (
+                        <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-xl">
+                            <h3 className="text-xs font-mono text-zinc-500 mb-4 uppercase tracking-widest">Consistency Velocity</h3>
+                            <div className="h-64 w-full relative">
+                                <AnalyticsChart logs={logs} habits={booleanHabits} showLegend={true} />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const HistoryView = ({ logs, deleteLog }) => {
+            const sortedLogs = [...logs].sort((a, b) => new Date(b.date) - new Date(a.date));
+            return (
+                <div className="animate-slide-in bg-[#09090b] border border-zinc-800 rounded-xl overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800">
+                        <h2 className="text-lg font-mono-tech tracking-widest text-white uppercase">Log History</h2>
+                    </div>
+                    <div className="max-h-[70vh] overflow-y-auto custom-scrollbar">
+                        <table className="w-full text-left text-xs font-mono">
+                            <thead className="bg-zinc-900 text-zinc-500 sticky top-0">
+                                <tr>
+                                    <th className="p-3">DATE</th>
+                                    <th className="p-3">HABIT</th>
+                                    <th className="p-3 text-right">VAL</th>
+                                    <th className="p-3 text-right">ACT</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-800">
+                                {sortedLogs.map(log => (
+                                    <tr key={log.id || log.timestamp} className="hover:bg-zinc-900/50">
+                                        <td className="p-3 text-zinc-400">{log.date.slice(5)}</td>
+                                        <td className="p-3 text-white">{log.habit}</td>
+                                        <td className="p-3 text-right text-zinc-400">{log.type === 'boolean' ? 'Done' : `${log.value}`}</td>
+                                        <td className="p-3 text-right">
+                                            <button onClick={() => deleteLog(log.id || log.timestamp)} className="text-red-500 hover:text-red-400">
+                                                <Icon name="trash-2" size={14} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Main App Container ---
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('log');
+            
+            // Initialize Date with Local Time String (YYYY-MM-DD)
+            const [selectedDate, setSelectedDate] = useState(() => {
+                const d = new Date();
+                const offset = d.getTimezoneOffset() * 60000;
+                return new Date(d.getTime() - offset).toISOString().split('T')[0];
+            });
+
+            const [logs, setLogs] = useState(() => JSON.parse(localStorage.getItem('habitLogs') || '[]'));
+            const [habits, setHabits] = useState(() => JSON.parse(localStorage.getItem('habitConfig') || JSON.stringify(DEFAULT_HABITS)));
+            
+            // Form State (Batching)
+            const [dailyEntries, setDailyEntries] = useState({});
+            
+            // Status & UI
+            const [loading, setLoading] = useState(false);
+            const [connectionStatus, setConnectionStatus] = useState('idle');
+            const [notification, setNotification] = useState(null);
+            
+            const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+            const [editingHabit, setEditingHabit] = useState(null);
+            const [viewingDay, setViewingDay] = useState(null);
+
+            const [settings, setSettings] = useState(() => JSON.parse(localStorage.getItem('habitSettings') || '{"mode":"local","googleScriptUrl":""}'));
+
+            // Load entries when date changes
+            useEffect(() => {
+                const entriesForDay = logs.filter(l => l.date === selectedDate);
+                const formState = {};
+                entriesForDay.forEach(log => {
+                    const habitId = log.habitId || habits.find(h => h.name === log.habit)?.id;
+                    if(habitId) formState[habitId] = log.value;
+                });
+                setDailyEntries(formState);
+            }, [selectedDate, logs]); 
+
+            // Sync Engine
+            useEffect(() => {
+                if (settings.mode === 'cloud') syncWithCloud();
+                else setConnectionStatus('local');
+            }, [settings.mode]);
+
+            const syncWithCloud = async () => {
+                if (!settings.googleScriptUrl) return;
+                setConnectionStatus('connecting');
+                try {
+                    const res = await fetch(`${settings.googleScriptUrl}?t=${Date.now()}`, { redirect: 'follow', credentials: 'omit' });
+                    const data = await res.json();
+                    if (data.status === 'success' && data.data) {
+                        if (data.data.logs) {
+                            // Sanitize Dates (Fix for Google Sheets ISO String issue)
+                            const cleanLogs = data.data.logs.map(l => ({
+                                ...l,
+                                date: String(l.date).split('T')[0] // Keep only YYYY-MM-DD
+                            }));
+                            setLogs(cleanLogs);
+                            localStorage.setItem('habitLogs', JSON.stringify(cleanLogs));
+                        }
+                        if (data.data.habits) {
+                            setHabits(data.data.habits);
+                            localStorage.setItem('habitConfig', JSON.stringify(data.data.habits));
+                        }
+                        setConnectionStatus('connected');
+                    } else if (Array.isArray(data)) {
+                         // Legacy Array Support
+                         const cleanLogs = data.map(l => ({ ...l, date: String(l.date).split('T')[0] }));
+                         setLogs(cleanLogs);
+                         localStorage.setItem('habitLogs', JSON.stringify(cleanLogs));
+                         setConnectionStatus('connected');
+                    }
+                } catch (e) {
+                    setConnectionStatus('error');
+                }
             };
 
-            const renderAnalyticsView = () => {
-                const totalPushups = logs.filter(l => l.habit === 'Pushups').reduce((acc, cur) => acc + parseFloat(cur.value), 0);
-                const totalRunTime = logs.filter(l => l.habit === 'Running').reduce((acc, cur) => acc + parseFloat(cur.value), 0);
-                const totalVibeCoding = logs.filter(l => l.habit === 'Vibe Coding').length;
-                return (
-                    <div className="animate-fade-in space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-[#09090b] border border-zinc-800 p-4 rounded"><div className="text-zinc-500 text-xs uppercase tracking-widest font-mono mb-2">Total Pushups</div><div className="text-3xl font-bold text-white">{totalPushups}</div></div>
-                            <div className="bg-[#09090b] border border-zinc-800 p-4 rounded"><div className="text-zinc-500 text-xs uppercase tracking-widest font-mono mb-2">Total Run Time</div><div className="text-3xl font-bold text-white">{totalRunTime}<span className="text-sm text-zinc-600 ml-1">min</span></div></div>
-                            <div className="bg-[#09090b] border border-zinc-800 p-4 rounded"><div className="text-zinc-500 text-xs uppercase tracking-widest font-mono mb-2">Vibe Coding</div><div className="text-3xl font-bold text-white">{totalVibeCoding}</div></div>
-                        </div>
-                        <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-xl"><h3 className="text-sm font-mono-tech text-zinc-400 mb-4 uppercase">7-Day Performance Velocity</h3><AnalyticsChart logs={logs} /></div>
-                    </div>
-                );
+            const pushToCloud = async (newLogs, newHabits) => {
+                if (settings.mode !== 'cloud' || !settings.googleScriptUrl) return;
+                try {
+                    await fetch(settings.googleScriptUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'text/plain' },
+                        body: JSON.stringify({ 
+                            action: 'overwrite', 
+                            logs: newLogs, 
+                            habits: newHabits 
+                        })
+                    });
+                    setConnectionStatus('connected');
+                } catch (e) {
+                    setConnectionStatus('error');
+                }
+            };
+
+            // --- Core Logic ---
+
+            const handleCommit = () => {
+                setLoading(true);
+                
+                const cleanLogs = logs.filter(l => l.date !== selectedDate);
+                const newEntries = [];
+                
+                habits.forEach(habit => {
+                    const val = dailyEntries[habit.id];
+                    // Save if numeric > 0 OR boolean === true
+                    const isValid = habit.type === 'numeric' ? (val !== undefined && val !== '' && val > 0) : (val === true);
+                    
+                    if (isValid) {
+                        newEntries.push({
+                            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                            date: selectedDate,
+                            habit: habit.name,
+                            habitId: habit.id,
+                            type: habit.type,
+                            value: val,
+                            timestamp: new Date().toISOString()
+                        });
+                    }
+                });
+
+                const updatedLogs = [...cleanLogs, ...newEntries];
+                updateData(updatedLogs, habits);
+                setNotification({ msg: 'Protocol Committed', type: 'success' });
+                setLoading(false);
+            };
+
+            const deleteLog = (logId) => {
+                const newLogs = logs.filter(l => l.id !== logId && l.timestamp !== logId);
+                updateData(newLogs, habits);
+                setNotification({ msg: 'Entry Deleted', type: 'success' });
+                if (viewingDay) {
+                    const remaining = newLogs.filter(l => l.date === viewingDay.date);
+                    if (remaining.length === 0) setViewingDay(null);
+                    else setViewingDay({...viewingDay, logs: remaining});
+                }
+            };
+
+            const saveHabit = (habit) => {
+                let newHabits;
+                if (habit.isNew) {
+                    const { isNew, ...cleanHabit } = habit;
+                    newHabits = [...habits, { ...cleanHabit, id: cleanHabit.name.toLowerCase().replace(/\s/g, '_') }];
+                } else {
+                    newHabits = habits.map(h => h.id === habit.id ? habit : h);
+                }
+                updateData(logs, newHabits);
+                setEditingHabit(null);
+                setNotification({ msg: 'Habit Saved', type: 'success' });
+            };
+
+            const deleteHabit = (habitId) => {
+                if(!confirm("Delete this habit? Old logs will remain.")) return;
+                const newHabits = habits.filter(h => h.id !== habitId);
+                updateData(logs, newHabits);
+                setEditingHabit(null);
+                setNotification({ msg: 'Habit Deleted', type: 'success' });
+            };
+
+            const updateData = (newLogs, newHabits) => {
+                setLogs(newLogs);
+                setHabits(newHabits);
+                localStorage.setItem('habitLogs', JSON.stringify(newLogs));
+                localStorage.setItem('habitConfig', JSON.stringify(newHabits));
+                clearTimeout(window.syncTimeout);
+                window.syncTimeout = setTimeout(() => pushToCloud(newLogs, newHabits), 1000);
             };
 
             return (
-                <div className="min-h-screen pb-20">
-                    {notification && <Toast message={notification.msg} type={notification.type} onClose={() => setNotification(null)} />}
+                <div className="min-h-screen pb-24 bg-black selection:bg-zinc-800">
+                    {notification && <Toast message={notification.message || notification.msg} type={notification.type} onClose={() => setNotification(null)} />}
 
-                    <header className="sticky top-0 z-40 backdrop-blur-md border-b border-zinc-800 bg-black/50">
+                    {/* Header */}
+                    <header className="sticky top-0 z-40 backdrop-blur-xl border-b border-zinc-800 bg-black/70">
                         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
                             <div className="flex items-center space-x-3">
-                                <div className={`w-3 h-3 rounded-full transition-all duration-500 ${getStatusColor()}`} 
-                                     title={`Status: ${connectionStatus}`}></div>
-                                <h1 className="text-lg font-bold tracking-tighter">HABIT OS</h1>
+                                <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${
+                                    connectionStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 
+                                    connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-600'
+                                }`}></div>
+                                <h1 className="text-lg font-bold tracking-tighter text-zinc-100">HABIT OS <span className="text-[10px] bg-zinc-800 px-1 rounded text-zinc-400 ml-1 align-middle">PRO</span></h1>
                             </div>
-                            <button onClick={() => setIsSettingsOpen(true)} className="text-zinc-500 hover:text-white transition-colors">
-                                <Icon name="settings" size={20} />
+                            <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full hover:bg-zinc-800 transition-colors">
+                                <Icon name="settings" size={20} className="text-zinc-400" />
                             </button>
                         </div>
                     </header>
 
-                    <main className="max-w-3xl mx-auto px-4 py-8">
-                        {activeTab === 'log' && renderLogView()}
-                        {activeTab === 'calendar' && renderCalendarView()}
-                        {activeTab === 'analytics' && renderAnalyticsView()}
+                    {/* Main Content */}
+                    <main className="max-w-3xl mx-auto px-4 py-6">
+                        {activeTab === 'log' && (
+                            <LogView 
+                                habits={habits} 
+                                dailyEntries={dailyEntries} 
+                                setDailyEntries={setDailyEntries} 
+                                selectedDate={selectedDate} 
+                                setSelectedDate={setSelectedDate}
+                                onCommit={handleCommit}
+                                loading={loading}
+                            />
+                        )}
+                        {activeTab === 'calendar' && <CalendarView logs={logs} habits={habits} setViewingDay={setViewingDay} />}
+                        {activeTab === 'analytics' && <AnalyticsView logs={logs} habits={habits} />}
+                        {activeTab === 'history' && <HistoryView logs={logs} deleteLog={deleteLog} />}
                     </main>
 
-                    <nav className="fixed bottom-0 left-0 w-full border-t border-zinc-800 bg-black/90 backdrop-blur pb-safe">
-                         <div className="max-w-md mx-auto flex justify-around p-4">
-                            <button onClick={() => setActiveTab('log')} className={`flex flex-col items-center space-y-1 ${activeTab === 'log' ? 'text-white' : 'text-zinc-600'}`}><Icon name="pen-tool" size={20} /><span className="text-[10px] font-mono uppercase">Log</span></button>
-                            <button onClick={() => setActiveTab('calendar')} className={`flex flex-col items-center space-y-1 ${activeTab === 'calendar' ? 'text-white' : 'text-zinc-600'}`}><Icon name="calendar" size={20} /><span className="text-[10px] font-mono uppercase">Viz</span></button>
-                            <button onClick={() => setActiveTab('analytics')} className={`flex flex-col items-center space-y-1 ${activeTab === 'analytics' ? 'text-white' : 'text-zinc-600'}`}><Icon name="activity" size={20} /><span className="text-[10px] font-mono uppercase">Data</span></button>
+                    {/* Bottom Nav */}
+                    <nav className="fixed bottom-0 left-0 w-full border-t border-zinc-800 bg-black/90 backdrop-blur-lg pb-safe z-50">
+                         <div className="max-w-md mx-auto flex justify-around p-3">
+                            {['log', 'calendar', 'analytics', 'history'].map(tab => (
+                                <button key={tab} onClick={() => setActiveTab(tab)} 
+                                    className={`flex flex-col items-center space-y-1 px-4 py-1 rounded-lg transition-all ${activeTab === tab ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
+                                    <Icon name={tab === 'log' ? 'plus-circle' : tab === 'calendar' ? 'layout-grid' : tab === 'analytics' ? 'bar-chart-2' : 'list'} size={24} strokeWidth={activeTab === tab ? 2.5 : 2} />
+                                    <span className="text-[9px] font-mono uppercase tracking-widest">{tab}</span>
+                                </button>
+                            ))}
                         </div>
                     </nav>
 
-                    <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="SYSTEM CONFIGURATION">
-                        <div className="space-y-4">
+                    {/* Settings Modal */}
+                    <Modal isOpen={isSettingsOpen} onClose={() => { setIsSettingsOpen(false); setEditingHabit(null); }} title="System Config">
+                        <div className="space-y-6">
                             <div>
-                                <label className="block text-xs text-zinc-500 font-mono mb-1 uppercase">Storage Mode</label>
-                                <select className="input-tech w-full px-3 py-2 rounded text-sm bg-black" value={settings.mode} onChange={(e) => setSettings({...settings, mode: e.target.value})}>
-                                    <option value="local">Local Storage (Offline)</option>
-                                    <option value="cloud">Google Sheets (Sync)</option>
-                                </select>
+                                <h4 className="text-xs font-mono text-zinc-500 uppercase mb-3">Habit Management</h4>
+                                <div className="space-y-2">
+                                    {habits.map(h => (
+                                        <div key={h.id} className="flex items-center justify-between bg-zinc-900/50 p-2 rounded border border-zinc-800">
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-zinc-400"><Icon name={h.icon} size={16} /></div>
+                                                <span className="text-sm text-zinc-300">{h.name}</span>
+                                            </div>
+                                            <button onClick={() => setEditingHabit(h)} className="text-zinc-500 hover:text-white p-1"><Icon name="edit-2" size={14} /></button>
+                                        </div>
+                                    ))}
+                                    <button onClick={() => setEditingHabit({ isNew: true })} 
+                                        className="w-full py-3 border border-dashed border-zinc-700 text-zinc-500 rounded text-xs font-mono hover:bg-zinc-900 hover:text-zinc-300 transition-colors">
+                                        + ADD NEW HABIT
+                                    </button>
+                                </div>
                             </div>
-                            {settings.mode === 'cloud' && (
+                            <div className="border-t border-zinc-800 pt-4">
+                                <h4 className="text-xs font-mono text-zinc-500 uppercase mb-3">Cloud Sync</h4>
+                                <select className="input-tech w-full p-2 rounded bg-black text-sm mb-3" value={settings.mode} onChange={(e) => setSettings({...settings, mode: e.target.value})}>
+                                    <option value="local">Offline Mode (Local)</option>
+                                    <option value="cloud">Cloud Sync (Live)</option>
+                                </select>
+                                {settings.mode === 'cloud' && (
+                                    <input placeholder="Script URL (/exec)" className="input-tech w-full p-2 rounded text-xs font-mono text-zinc-400"
+                                        value={settings.googleScriptUrl} onChange={(e) => setSettings({...settings, googleScriptUrl: e.target.value})} />
+                                )}
+                            </div>
+                            <button onClick={() => { localStorage.setItem('habitSettings', JSON.stringify(settings)); setIsSettingsOpen(false); }} 
+                                className="w-full bg-white text-black py-3 rounded font-bold text-sm hover:bg-zinc-200">
+                                SAVE & CLOSE
+                            </button>
+                        </div>
+                    </Modal>
+
+                    {/* Edit Habit Modal (Overlay) */}
+                    <Modal isOpen={!!editingHabit} onClose={() => setEditingHabit(null)} title={editingHabit?.isNew ? "New Habit" : "Edit Habit"}>
+                        {editingHabit && (
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs text-zinc-500 font-mono mb-1 uppercase">Apps Script Web App URL</label>
-                                    <input type="text" value={settings.googleScriptUrl} onChange={(e) => setSettings({...settings, googleScriptUrl: e.target.value})} placeholder="https://script.google.com/.../exec" className="input-tech w-full px-3 py-2 rounded text-xs font-mono text-zinc-400" />
-                                    <div className="flex justify-between items-center mt-2">
-                                        <span className={`text-[10px] ${connectionStatus === 'connected' ? 'text-emerald-500' : connectionStatus === 'error' ? 'text-red-500' : 'text-zinc-600'}`}>
-                                            STATUS: {connectionStatus.toUpperCase()}
-                                        </span>
+                                    <label className="text-xs text-zinc-500 uppercase font-mono">Name</label>
+                                    <input className="input-tech w-full p-2 rounded bg-black" value={editingHabit.name || ''} onChange={e => setEditingHabit({...editingHabit, name: e.target.value})} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs text-zinc-500 uppercase font-mono">Type</label>
+                                        <select className="input-tech w-full p-2 rounded bg-black text-sm" value={editingHabit.type || 'boolean'} onChange={e => setEditingHabit({...editingHabit, type: e.target.value})}>
+                                            <option value="boolean">Check-in</option>
+                                            <option value="numeric">Numeric</option>
+                                        </select>
+                                    </div>
+                                    {editingHabit.type === 'numeric' && (
+                                        <div>
+                                            <label className="text-xs text-zinc-500 uppercase font-mono">Unit</label>
+                                            <input className="input-tech w-full p-2 rounded bg-black" placeholder="min, count" value={editingHabit.unit || ''} onChange={e => setEditingHabit({...editingHabit, unit: e.target.value})} />
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="text-xs text-zinc-500 uppercase font-mono mb-2 block">Icon</label>
+                                    <div className="grid grid-cols-6 gap-2 bg-black/40 p-2 rounded border border-zinc-800 max-h-32 overflow-y-auto">
+                                        {ICON_OPTIONS.map(icon => (
+                                            <button key={icon} onClick={() => setEditingHabit({...editingHabit, icon})}
+                                                className={`p-2 rounded flex items-center justify-center hover:bg-zinc-800 ${editingHabit.icon === icon ? 'bg-white text-black' : 'text-zinc-500'}`}>
+                                                <Icon name={icon} size={18} />
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
-                            )}
-                            <button onClick={() => handleSaveSettings(settings)} className="w-full bg-white text-black py-2 rounded font-bold text-sm hover:bg-zinc-200">SAVE CONFIG</button>
+                                <div>
+                                    <label className="text-xs text-zinc-500 uppercase font-mono mb-2 block">Color</label>
+                                    <div className="flex gap-2 overflow-x-auto pb-2">
+                                        {['#3b82f6','#06b6d4','#10b981','#84cc16','#f59e0b','#ef4444','#d946ef','#8b5cf6','#ec4899','#64748b'].map(c => (
+                                            <button key={c} onClick={() => setEditingHabit({...editingHabit, color: c})}
+                                                className={`w-8 h-8 rounded-full border-2 ${editingHabit.color === c ? 'border-white scale-110' : 'border-transparent opacity-50'}`}
+                                                style={{backgroundColor: c}}></button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 pt-4 border-t border-zinc-800">
+                                    {!editingHabit.isNew && (
+                                        <button onClick={() => deleteHabit(editingHabit.id)} className="flex-1 py-2 border border-red-900 text-red-500 rounded text-xs font-bold hover:bg-red-900/20">DELETE</button>
+                                    )}
+                                    <button onClick={() => saveHabit(editingHabit)} className="flex-[2] py-2 bg-white text-black rounded text-xs font-bold hover:bg-zinc-200">SAVE</button>
+                                </div>
+                            </div>
+                        )}
+                    </Modal>
+
+                    {/* Day Detail Modal */}
+                    <Modal isOpen={!!viewingDay} onClose={() => setViewingDay(null)} title={`Entries: ${viewingDay?.date}`}>
+                        <div className="space-y-2">
+                            {viewingDay?.logs.map(log => {
+                                const habit = habits.find(h => h.name === log.habit) || {};
+                                return (
+                                    <div key={log.id || log.timestamp} className="flex items-center justify-between bg-zinc-900 p-3 rounded border border-zinc-800">
+                                        <div className="flex items-center gap-3">
+                                            <Icon name={habit.icon || 'circle'} size={18} className="text-zinc-400" />
+                                            <div>
+                                                <div className="text-sm text-white">{log.habit}</div>
+                                                <div className="text-xs text-zinc-500">{log.value} {habit.unit}</div>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => deleteLog(log.id || log.timestamp)} className="p-2 text-red-500 hover:bg-red-950 rounded">
+                                            <Icon name="trash-2" size={16} />
+                                        </button>
+                                    </div>
+                                )
+                            })}
                         </div>
                     </Modal>
                 </div>
