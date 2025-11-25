@@ -86,7 +86,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
 
         // --- Config & Utilities ---
         const DEFAULT_HABITS = [
@@ -143,6 +143,9 @@
             const endDate = new Date(today);
             endDate.setDate(today.getDate() + (6 - dayOfWeek));
             
+            // Optimization: Create Set for O(1) lookups
+            const activeDates = useMemo(() => new Set(logs.map(l => l.date)), [logs]);
+
             const grid = [];
             for (let w = 0; w < weeks; w++) {
                 const weekData = [];
@@ -150,12 +153,23 @@
                     const date = new Date(endDate);
                     date.setDate(endDate.getDate() - ((weeks - 1 - w) * 7 + (6 - d)));
                     const dateStr = date.toLocaleDateString('en-CA');
-                    const completedCount = logs.filter(l => l.date === dateStr).length;
+                    
+                    // Consistency Logic: Rolling 7-Day Attendance
+                    // Measures momentum (streakiness) rather than daily volume
+                    let activeDaysInWindow = 0;
+                    for(let k = 0; k < 7; k++) {
+                        const lookback = new Date(date);
+                        lookback.setDate(date.getDate() - k);
+                        const lookbackStr = lookback.toLocaleDateString('en-CA');
+                        if (activeDates.has(lookbackStr)) activeDaysInWindow++;
+                    }
+
+                    // Map 0-7 active days to intensity 0-4
                     let intensity = 0;
-                    if (completedCount > 0) intensity = 1;
-                    if (completedCount > 2) intensity = 2;
-                    if (completedCount > 4) intensity = 3;
-                    if (completedCount > 6) intensity = 4;
+                    if (activeDaysInWindow >= 1) intensity = 1; // 1-2 days
+                    if (activeDaysInWindow >= 3) intensity = 2; // 3-4 days
+                    if (activeDaysInWindow >= 5) intensity = 3; // 5-6 days
+                    if (activeDaysInWindow >= 7) intensity = 4; // Perfect week
                     
                     weekData.push({ date: dateStr, intensity });
                 }
@@ -181,7 +195,7 @@
                                     {week.map((day, di) => (
                                         <div key={di} 
                                             className={`w-3 h-3 rounded-sm transition-all duration-300 ${getIntensityColor(day.intensity)}`} 
-                                            title={`${day.date}: ${day.intensity} habits`}
+                                            title={`${day.date}: ${day.intensity} (7-day momentum)`}
                                         ></div>
                                     ))}
                                 </div>
@@ -191,7 +205,7 @@
                     
                     {/* Legend */}
                     <div className="flex items-center justify-end gap-2 mt-3 border-t border-zinc-800/50 pt-2">
-                        <span className="text-[9px] uppercase font-mono text-zinc-600 tracking-wider">Intensity</span>
+                        <span className="text-[9px] uppercase font-mono text-zinc-600 tracking-wider">Consistency</span>
                         <div className="flex gap-1.5">
                             {[0,1,2,3,4].map(i => (
                                 <div key={i} className={`w-2.5 h-2.5 rounded-sm ${getIntensityColor(i)}`}></div>
@@ -202,7 +216,7 @@
             );
         };
 
-        // --- Analytics Chart Component (Refactored) ---
+        // --- Analytics Chart Component ---
         const AnalyticsChart = ({ logs, habits, showLegend = false }) => {
             const canvasRef = useRef(null);
             const chartRef = useRef(null);
@@ -340,6 +354,7 @@
         const CalendarView = ({ logs, habits, setViewingDay }) => {
             const today = new Date();
             const [viewDate, setViewDate] = useState(new Date());
+            const [selectedHabitId, setSelectedHabitId] = useState(null);
             
             const year = viewDate.getFullYear();
             const month = viewDate.getMonth();
@@ -351,8 +366,51 @@
             
             const days = Array(startDay).fill(null).concat([...Array(daysInMonth).keys()].map(i => i + 1));
 
+            // Filter Logic
+            const filteredLogs = useMemo(() => {
+                if (!selectedHabitId) return logs;
+                const selectedHabit = habits.find(h => h.id === selectedHabitId);
+                if (!selectedHabit) return logs;
+                return logs.filter(l => l.habitId === selectedHabitId || l.habit === selectedHabit.name);
+            }, [logs, selectedHabitId, habits]);
+
             return (
                 <div className="space-y-6 animate-slide-in pb-safe">
+                    
+                    {/* Filter Bar */}
+                    <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
+                        <button 
+                            onClick={() => setSelectedHabitId(null)}
+                            className={`px-4 py-2 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border whitespace-nowrap transition-all
+                                ${!selectedHabitId ? 'bg-white text-black border-white' : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}
+                        >
+                            All Activity
+                        </button>
+                        {habits.map(h => (
+                            <button 
+                                key={h.id}
+                                onClick={() => setSelectedHabitId(selectedHabitId === h.id ? null : h.id)}
+                                className={`px-4 py-2 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border whitespace-nowrap transition-all flex items-center gap-2
+                                    ${selectedHabitId === h.id ? 'text-black border-transparent' : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}
+                                style={selectedHabitId === h.id ? { backgroundColor: h.color } : {}}
+                            >
+                                <Icon name={h.icon} size={14} />
+                                {h.name}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Heatmap Header */}
+                    <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-xl overflow-hidden">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-xs font-mono text-zinc-500 uppercase">
+                                {selectedHabitId ? `${habits.find(h => h.id === selectedHabitId)?.name} Consistency` : "Consistency Map"}
+                            </h3>
+                            <span className="text-[10px] text-zinc-600">Last 16 Weeks</span>
+                        </div>
+                        <Heatmap logs={filteredLogs} />
+                    </div>
+
                     <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-xl">
                          <div className="flex justify-between items-center mb-6">
                             <button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-2 hover:bg-zinc-800 rounded"><Icon name="chevron-left" size={18} /></button>
@@ -369,14 +427,18 @@
                                 if (!d) return <div key={i} className="aspect-square"></div>;
                                 
                                 const dateStr = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                                const dayLogs = logs.filter(l => l.date === dateStr);
+                                
+                                // Use filteredLogs here
+                                const dayLogs = filteredLogs.filter(l => l.date === dateStr);
                                 const isToday = dateStr === today.toLocaleDateString('en-CA');
                                 
                                 return (
                                     <button key={i} 
                                         onClick={() => dayLogs.length > 0 && setViewingDay({ date: dateStr, logs: dayLogs })}
                                         className={`aspect-square rounded flex flex-col items-center justify-start pt-1 relative border transition-all
-                                            ${isToday ? 'border-zinc-500 bg-zinc-900' : 'border-zinc-800/50 bg-black hover:bg-zinc-900'}`}
+                                            ${isToday ? 'border-zinc-500 bg-zinc-900' : 'border-zinc-800/50 bg-black hover:bg-zinc-900'}
+                                            ${dayLogs.length === 0 && selectedHabitId ? 'opacity-20' : 'opacity-100'} 
+                                        `} 
                                     >
                                         <span className={`text-[10px] font-mono ${dayLogs.length > 0 ? 'text-white font-bold' : 'text-zinc-600'}`}>{d}</span>
                                         <div className="grid grid-cols-2 gap-0.5 mt-1 w-full px-1">
@@ -395,14 +457,6 @@
                                 );
                             })}
                         </div>
-                    </div>
-
-                    <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-xl overflow-hidden">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-xs font-mono text-zinc-500 uppercase">Consistency Map</h3>
-                            <span className="text-[10px] text-zinc-600">Last 16 Weeks</span>
-                        </div>
-                        <Heatmap logs={logs} />
                     </div>
                 </div>
             );
